@@ -5,6 +5,7 @@ from django.shortcuts import render
 from django.views.decorators.http import require_POST
 
 from .models import AnalysisJob
+from .services import run_prediction  # [B] FastAPI 호출
 
 ALLOWED_TYPES = {"mp4", "mov", "avi"}  # 템플릿 accept=".mp4,.mov,.avi" 와 맞춤
 
@@ -31,6 +32,7 @@ def analyze(request):
 
     job = AnalysisJob.objects.create(video=video, file_type=file_type)  # status = PENDING
     # [B] 여기서 FastAPI를 호출해 action_label·confidence·status·processing_time을 채운다.
+    run_prediction(job)
 
     # analyze.js가 표에 한 줄 추가할 때 쓰는 키 6개
     return JsonResponse({
