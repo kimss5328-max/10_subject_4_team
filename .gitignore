@@ -4,3 +4,8 @@ __pycache__/
 db.sqlite3
 .env
 .python-version
+
+# FastAPI
+.venv/
+ai_server/models/*
+!ai_server/models/README.md
