@@ -33,22 +33,26 @@ MP_TO_COCO = [0, 2, 5, 7, 8, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
 
 
 def read_video(video_path):
-    """영상에서 프레임 목록을 꺼낸다. OpenCV가 읽은 그대로(BGR) 돌려준다."""
+    """영상에서 프레임을 한 장씩 꺼내 주는 생성기를 돌려준다. OpenCV가 읽은 그대로(BGR).
+    목록에 다 담지 않으므로, 영상이 길어도 메모리에는 프레임 한 장만 있다.
+    """
     cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
+    if not cap.isOpened():               # 열기 검사는 지금 바로 한다 (못 열면 바로 ValueError)
         raise ValueError(f"영상을 열 수 없습니다: {video_path}")
 
-    frames = []
-    while True:
-        ok, frame = cap.read()   # 한 장씩 읽는다. 끝나면 ok가 False
-        if not ok:
-            break
-        frames.append(frame)
-    cap.release()
+    def frames():
+        count = 0
+        while True:
+            ok, frame = cap.read()       # 한 장씩 읽는다. 끝나면 ok가 False
+            if not ok:
+                break
+            count += 1
+            yield frame                  # 한 장을 넘겨주고, 다음 장을 달라고 할 때까지 기다린다
+        cap.release()
+        if count == 0:
+            raise ValueError(f"영상에서 프레임을 하나도 읽지 못했습니다: {video_path}")
 
-    if not frames:
-        raise ValueError(f"영상에서 프레임을 하나도 읽지 못했습니다: {video_path}")
-    return frames
+    return frames()
 
 
 def extract_keypoints(frames):
