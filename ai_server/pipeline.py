@@ -5,9 +5,10 @@
 main.py(API 담당)는 analyze_video(video_path)만 부르고,
 돌려받은 dict를 그대로 응답으로 보낸다.
 
-[1단계] 아래 함수 4개는 모두 가짜 값을 돌려준다.
-        하나씩 진짜로 바꿔 가도 analyze_video와 반환 모양은 그대로 둔다.
+[현재] 함수 4개(read_video, extract_keypoints, make_features, predict) 모두 진짜로 동작한다.
+       analyze_video와 반환 모양은 1단계 그대로다.
 """
+import math
 import time
 from pathlib import Path
 
@@ -77,8 +78,71 @@ def extract_keypoints(frames):
 
 
 def make_features(keypoints):
-    """30 Step × 38 = 1,140개 특징을 만든다. [가짜] 0으로 채움. (나중에: 학습과 같은 계산)"""
-    return [0.0] * (STEPS * FEATURES)
+    """Frame별 관절 → 30 Step × 38 = 1,140개 특징.
+    학습 코드(sequence_utils.py, feature_utils.py)와 같은 순서·같은 식을 numpy로 옮겼다.
+    """
+    # 각도를 잴 세 점 (끝점 A, 가운데 B, 끝점 C). B에서 꺾인 각도를 잰다. 숫자는 COCO 번호
+    angle_joints = [
+        (5, 7, 9),     # 왼 팔꿈치: 왼 어깨 - 왼 팔꿈치 - 왼 손목
+        (6, 8, 10),    # 오른 팔꿈치: 오른 어깨 - 오른 팔꿈치 - 오른 손목
+        (11, 13, 15),  # 왼 무릎: 왼 골반 - 왼 무릎 - 왼 발목
+        (12, 14, 16),  # 오른 무릎: 오른 골반 - 오른 무릎 - 오른 발목
+    ]
+
+    rows = []        # 쓸 수 있는 Frame의 38개 특징
+    frame_ids = []   # 그 Frame의 번호 (30 Step으로 나눌 때 시간 위치로 쓴다)
+    for i, kp in enumerate(keypoints):
+        # 1) Frame 고르기
+        if kp is None:                                   # 사람을 못 찾은 Frame은 버린다
+            continue
+        points = np.asarray(kp, dtype=np.float32)        # 17 × 2 픽셀 좌표
+        if not np.all(np.isfinite(points)):              # 숫자가 아닌 값이 있으면 버린다
+            continue
+
+        # 2) 정규화: 골반 중점을 (0, 0)으로 옮기고, 어깨 폭으로 나눈다
+        center = (points[11] + points[12]) / 2.0                 # 왼·오른 골반의 중점 = 몸 중심
+        scale = float(np.linalg.norm(points[5] - points[6]))     # 왼·오른 어깨 사이 거리
+        if scale < 1e-8:                                         # 어깨 폭을 못 재면 버린다
+            continue
+        normalized = (points - center) / scale                   # 사람 크기·위치와 상관없는 좌표
+
+        # 3) 관절 각도 4개 (단위: 도). 정규화 전 픽셀 좌표로 잰다
+        angles = []
+        for a, b, c in angle_joints:
+            ba = points[a] - points[b]                   # 가운데 점 → 끝점 A 방향
+            bc = points[c] - points[b]                   # 가운데 점 → 끝점 C 방향
+            norm_ba = np.linalg.norm(ba)                 # 두 방향의 길이
+            norm_bc = np.linalg.norm(bc)
+            if norm_ba < 1e-8 or norm_bc < 1e-8:         # 점이 겹치면 각도를 못 잰다
+                angles.append(float("nan"))
+                continue
+            cosine = np.dot(ba, bc) / (norm_ba * norm_bc)    # 두 방향 사이 각도의 cos
+            cosine = np.clip(cosine, -1.0, 1.0)              # 계산 오차로 1을 넘지 않게
+            angles.append(math.degrees(math.acos(float(cosine))))   # cos → 각도(도)
+
+        # 4) Frame당 38개 = 정규화 좌표 34개 (관절마다 x, y) + 각도 4개
+        row = np.asarray(list(normalized.reshape(-1)) + angles, dtype=np.float32)
+        if not np.all(np.isfinite(row)):                 # 각도를 못 잰 Frame은 버린다
+            continue
+        rows.append(row)
+        frame_ids.append(i)
+
+    # 쓸 수 있는 Frame이 너무 적으면 예측하지 않는다 (학습 때도 이런 영상은 뺐다)
+    min_valid = get_bundle().min_valid_frames
+    if len(rows) < min_valid:
+        raise ValueError(f"사람이 보이는 Frame이 {len(rows)}개입니다. {min_valid}개 이상 필요합니다.")
+
+    # 5) 30 Step으로 맞추기: Frame 번호를 0~1 위치로 바꾸고, 30칸 위치의 값을 선형 보간
+    matrix = np.asarray(rows, dtype=np.float32)                # (유효 Frame 수) × 38
+    ids = np.asarray(frame_ids, dtype=np.float32)
+    original_x = (ids - ids[0]) / (ids[-1] - ids[0])           # 첫 Frame 0, 마지막 Frame 1
+    target_x = np.linspace(0.0, 1.0, STEPS)                    # 0~1을 같은 간격 30칸으로
+    sequence = np.empty((STEPS, FEATURES), dtype=np.float32)   # 30 × 38
+    for f in range(FEATURES):                                  # 특징 하나씩
+        sequence[:, f] = np.interp(target_x, original_x, matrix[:, f])   # 사이 값은 직선으로 채움
+
+    # 6) Step 순서대로 한 줄로 펴면 1,140개 (rf_feature_columns.json 순서와 같다)
+    return sequence.reshape(-1).tolist()
 
 
 def predict(features):
