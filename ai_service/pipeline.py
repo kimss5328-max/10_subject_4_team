@@ -18,7 +18,7 @@ import numpy as np
 from mediapipe.tasks import python as mp_tasks
 from mediapipe.tasks.python import vision
 
-from models_loader import get_bundle, load_model_bundle
+from ai_service.models_loader import get_bundle, load_model_bundle
 
 STEPS = 30          # 모델 입력: 30 Step
 FEATURES = 38       # Step당 특징 38개 (좌표 34 + 관절 각도 4)

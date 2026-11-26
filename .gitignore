@@ -7,5 +7,9 @@ db.sqlite3
 
 # FastAPI
 .venv/
-ai_server/models/*
-!ai_server/models/README.md
+ai_service/models/*
+!ai_service/models/README.md
+
+# PM 브랜치(성섭 님)와 같은 줄
+media/
+ai_service/models/
