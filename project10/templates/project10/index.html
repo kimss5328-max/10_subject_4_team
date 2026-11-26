@@ -1,0 +1,153 @@
+{% load static %}
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 동작 분석</title>
+
+  <!-- 디자인: 이 <style> 안만 바꾸면 됨 (백엔드와 맞출 이름 없음) -->
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #f5f6f8;
+      color: #1d2433;
+      font-family: -apple-system, "Segoe UI", "Malgun Gothic", "Noto Sans KR", sans-serif;
+      font-size: 15px;
+    }
+    .container { max-width: 880px; margin: 0 auto; padding: 40px 20px; }
+    h1 { margin: 0 0 6px; font-size: 26px; }
+    .sub { margin: 0 0 24px; color: #6b7280; }
+    .card {
+      background: #fff;
+      border: 1px solid #e4e7ec;
+      border-radius: 12px;
+      padding: 22px;
+      margin-bottom: 20px;
+    }
+    .card h2 { margin: 0 0 14px; font-size: 17px; }
+
+    /* 업로드 줄 */
+    .upload { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .upload input[type="file"] {
+      flex: 1;
+      min-width: 240px;
+      padding: 10px;
+      border: 1.5px dashed #c3cad6;
+      border-radius: 8px;
+      background: #fafbfc;
+    }
+    .upload button {
+      height: 42px;
+      padding: 0 20px;
+      border: 0;
+      border-radius: 8px;
+      background: #2f6fde;
+      color: #fff;
+      font: inherit;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .upload button:disabled { opacity: .6; cursor: wait; }
+    .hint { margin: 10px 0 0; font-size: 13px; color: #8a93a3; }
+    .error {
+      margin: 0 0 16px;
+      padding: 10px 14px;
+      border-radius: 8px;
+      background: #fbe7e5;
+      color: #c9362c;
+    }
+
+    /* 작업 기록 표 */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      font-size: 13px;
+      font-weight: 600;
+      color: #6b7280;
+      padding: 10px 12px;
+      border-bottom: 1px solid #e4e7ec;
+      white-space: nowrap;
+    }
+    td { padding: 12px; border-bottom: 1px solid #f0f2f5; white-space: nowrap; }
+    tbody tr:last-child td { border-bottom: 0; }
+    .empty { text-align: center; color: #8a93a3; padding: 24px; }
+
+    /* 결과 배지 */
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+    .badge-SUCCESS { background: #e3f4ec; color: #1f8a5b; }
+    .badge-FAILURE { background: #fbe7e5; color: #c9362c; }
+    .badge-PENDING { background: #eef0f3; color: #6b7280; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>AI 동작 분석</h1>
+    <p class="sub">영상을 올리면 동작을 분석하고 작업 기록에 결과를 남깁니다.</p>
+
+    <section class="card">
+      <h2>새 분석</h2>
+
+      <!-- ★① error : views.py가 넘겨주는 오류 문구 이름 -->
+      <!--    (fetch 실패 문구도 analyze.js가 여기에 표시) -->
+      <p id="error-box" class="error" {% if not error %}hidden{% endif %}>{{ error }}</p>
+
+      <!-- ★⑩ data-api : 분석 요청 주소. project10/urls.py의 path("analyze/", ...) 와 같아야 함 -->
+      <!--    백엔드 주소가 생기면 url 태그(name="analyze")로 바꿔도 됨 -->
+      <form id="analysis-form" class="upload" data-api="/analyze/">
+        {% csrf_token %}
+
+        <!-- ★② name="video" : views.py의 request.FILES.get("video") 와 같아야 함 -->
+        <input type="file" name="video" accept=".mp4,.mov,.avi" required>
+        <button type="submit">AI 분석 시작</button>
+      </form>
+      <p class="hint">분석이 끝날 때까지 몇 초 걸려요. MP4 · MOV · AVI</p>
+    </section>
+
+    <section class="card">
+      <h2>작업 기록</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>번호</th><th>자세</th><th>신뢰도</th><th>파일 유형</th><th>결과</th><th>처리 시간</th>
+            </tr>
+          </thead>
+          <tbody id="job-rows">
+            <!-- ★③ jobs : views.py의 render(..., {"jobs": ...}) 이름과 같아야 함 -->
+            <!--    job  : 반복할 때 한 줄을 부르는 이름. 프론트가 정함 (안 맞춰도 됨) -->
+            {% for job in jobs %}
+            <tr>
+              <!-- ★④ id : 모델 기본 번호 (Django가 자동으로 만듦) -->
+              <td>{{ job.id }}</td>
+
+              <!-- ★⑤ action_label : 모델의 자세 필드 이름 -->
+              <td>{{ job.action_label|default:"-" }}</td>
+
+              <!-- ★⑥ confidence : 모델의 신뢰도 필드 이름 -->
+              <td>{% if job.confidence is not None %}{{ job.confidence|floatformat:2 }}{% else %}-{% endif %}</td>
+
+              <!-- ★⑦ file_type : 모델의 파일 유형 필드 이름 -->
+              <td>{{ job.file_type|default:"-" }}</td>
+
+              <!-- ★⑧ status : 모델의 결과 필드 이름 (값은 SUCCESS / FAILURE) -->
+              <td><span class="badge badge-{{ job.status }}">{{ job.status }}</span></td>
+
+              <!-- ★⑨ processing_time : 모델의 처리 시간 필드 이름 -->
+              <td>{% if job.processing_time is not None %}{{ job.processing_time|floatformat:1 }}초{% else %}-{% endif %}</td>
+            </tr>
+            {% empty %}
+            <tr id="empty-row"><td colspan="6" class="empty">아직 작업 기록이 없어요.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <!-- [연결] 버튼 클릭 → /analyze/ 요청 → 표에 한 줄 추가 -->
+  <script src="{% static 'project10/js/analyze.js' %}"></script>
+</body>
+</html>
