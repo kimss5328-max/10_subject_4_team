@@ -1,7 +1,11 @@
-from fastapi import FastAPI
-
+import shutil
+import tempfile
+from pathlib import Path
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from contextlib import asynccontextmanager
 from ai_service.models_loader import load_model_bundle, is_ready, get_bundle
+from ai_service.pipeline import analyze_video   # 주한이 파일
+
 
 
 @asynccontextmanager
@@ -21,3 +25,17 @@ def health():
     "classes" : bundle.classes,
     "sequence_steps" : bundle.sequence_steps
   }
+  
+@app.post("/predict/video")
+def predict_video(file: UploadFile = File(...)):
+  suffix = Path(file.filename or "").suffix or ".mp4"
+  with tempfile.NamedTemporaryFile(delete = False, suffix = suffix) as tmp:
+    shutil.copyfileobj(file.file, tmp)
+    tmp_path = Path(tmp.name)
+    
+  try:
+    return analyze_video(str(tmp_path))
+  except ValueError as e:
+    raise HTTPException(status_code = 400, detail = str(e))
+  finally:
+    tmp_path.unlink(missing_ok = True)
