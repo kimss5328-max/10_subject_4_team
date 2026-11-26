@@ -4,6 +4,7 @@ __pycache__/
 db.sqlite3
 .env
 .python-version
+<<<<<<< HEAD
 
 # FastAPI
 .venv/
@@ -11,5 +12,10 @@ ai_service/models/*
 !ai_service/models/README.md
 
 # PM 브랜치(성섭 님)와 같은 줄
+=======
+venv/
+__pycache__/
+db.sqlite3
+>>>>>>> origin/main
 media/
 ai_service/models/

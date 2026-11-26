@@ -140,7 +140,9 @@ def make_features(keypoints):
     sequence = np.empty((STEPS, FEATURES), dtype=np.float32)   # 30 × 38
     for f in range(FEATURES):                                  # 특징 하나씩
         sequence[:, f] = np.interp(target_x, original_x, matrix[:, f])   # 사이 값은 직선으로 채움
-
+    expected = get_bundle().feature_count
+    if sequence.size != expected:
+        raise ValueError (f"입력 길이 {sequence.size} 기대 길이 {expected}")
     # 6) Step 순서대로 한 줄로 펴면 1,140개 (rf_feature_columns.json 순서와 같다)
     return sequence.reshape(-1).tolist()
 
