@@ -10,6 +10,7 @@ main.py(API 담당)는 analyze_video(video_path)만 부르고,
 """
 import time
 
+import cv2
 import numpy as np
 
 from models_loader import get_bundle, load_model_bundle
@@ -19,8 +20,22 @@ FEATURES = 38       # Step당 특징 38개 (좌표 34 + 관절 각도 4)
 
 
 def read_video(video_path):
-    """영상에서 프레임 목록을 꺼낸다. [가짜] 빈 목록. (나중에: OpenCV)"""
-    return []
+    """영상에서 프레임 목록을 꺼낸다. OpenCV가 읽은 그대로(BGR) 돌려준다."""
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        raise ValueError(f"영상을 열 수 없습니다: {video_path}")
+
+    frames = []
+    while True:
+        ok, frame = cap.read()   # 한 장씩 읽는다. 끝나면 ok가 False
+        if not ok:
+            break
+        frames.append(frame)
+    cap.release()
+
+    if not frames:
+        raise ValueError(f"영상에서 프레임을 하나도 읽지 못했습니다: {video_path}")
+    return frames
 
 
 def extract_keypoints(frames):
@@ -72,4 +87,4 @@ def analyze_video(video_path):
 if __name__ == "__main__":
     # 직접 확인용: python pipeline.py
     load_model_bundle()   # 서버에서는 main.py가 켤 때 부른다
-    print(analyze_video("test.mp4"))
+    print(analyze_video("/home/user1/ai_vision/test_videos/S03_A006_T01.mp4"))
