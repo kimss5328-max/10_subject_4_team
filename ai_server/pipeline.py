@@ -10,6 +10,10 @@ main.py(API 담당)는 analyze_video(video_path)만 부르고,
 """
 import time
 
+import numpy as np
+
+from models_loader import get_bundle, load_model_bundle
+
 STEPS = 30          # 모델 입력: 30 Step
 FEATURES = 38       # Step당 특징 38개 (좌표 34 + 관절 각도 4)
 
@@ -30,8 +34,20 @@ def make_features(keypoints):
 
 
 def predict(features):
-    """(action_label, confidence)를 돌려준다. [가짜] 고정 값. (나중에: models/rf_action_team.joblib)"""
-    return "side_lying_leg_raise", 0.8
+    """(action_label, confidence)를 돌려준다. 모델은 models_loader가 불러 둔 것을 쓴다."""
+    bundle = get_bundle()
+    model = bundle.model
+
+    if len(features) != bundle.feature_count:
+        raise ValueError(f"특징 개수가 {len(features)}개입니다. {bundle.feature_count}개여야 합니다.")
+
+    x = np.array(features, dtype=float).reshape(1, -1)   # 1행 × 1,140열
+    proba = model.predict_proba(x)[0]                     # 클래스 3개의 확률
+    best = int(np.argmax(proba))                          # 가장 큰 확률의 위치
+
+    label = str(model.classes_[best])
+    confidence = float(proba[best])
+    return label, confidence
 
 
 def analyze_video(video_path):
@@ -55,4 +71,5 @@ def analyze_video(video_path):
 
 if __name__ == "__main__":
     # 직접 확인용: python pipeline.py
+    load_model_bundle()   # 서버에서는 main.py가 켤 때 부른다
     print(analyze_video("test.mp4"))
