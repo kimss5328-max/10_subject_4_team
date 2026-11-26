@@ -4,8 +4,6 @@ import json
 from pathlib import Path
 import joblib
 
-# from src.sequenc_utils import sequence_feature 보류
-
 BASE_DIR = Path(__file__).resolve().parent            # models 폴더 찾기
 MODEL_DIR = Path(os.getenv("MODEL_DIR", "models"))
 if not MODEL_DIR.is_absolute():
@@ -40,9 +38,7 @@ def load_model_bundle() -> ModelBundle:   # load_model_bundle 함수가 ModelBun
     raise RuntimeError(   # 하나라도 다르면 오류 메세지
       f"입력 차원 불일치 : model = {model.n_features_in_}, columns = {len(columns)}, "
       f"info = {info['feature_count']}, stepsx38 = {expected}"
-    )
-  # if len(features) != expected:  pipeline에서 값 가져오기
-  #   raise ValueError (f"입력 길이 {len()}")
+    ) 
   classes = [str(c) for c in model.classes_]
   if set(classes) != set(map(str, info["classes"])):
     raise RuntimeError(f"Class 불일치 : model = {classes}, info = {info['classes']}")
